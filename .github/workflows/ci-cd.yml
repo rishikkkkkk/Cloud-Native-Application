@@ -5,9 +5,17 @@ on:
     branches:
       - main        # triggers prod deploy
       - develop     # triggers dev deploy
+    paths:
+      - 'app/**'
+      - 'helm/devops-app/**'
+      - '.github/workflows/ci-cd.yaml'
   pull_request:
     branches:
       - main
+    paths:
+      - 'app/**'
+      - 'helm/devops-app/**'
+      - '.github/workflows/ci-cd.yaml'
 
 env:
   IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/devops-app

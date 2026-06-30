@@ -3,6 +3,10 @@ name: PR Validation
 on:
   pull_request:
     branches: [main, develop]
+    paths:
+      - 'app/**'
+      - 'helm/devops-app/**'
+      - '.github/workflows/ci-cd.yaml'
 
 jobs:
   lint-and-validate:
