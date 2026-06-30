@@ -1,0 +1,60 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  lint-and-validate:
+    name: Lint & Validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (no push)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./app
+          push: false
+          tags: devops-app:pr-${{ github.event.pull_request.number }}
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.14.0'
+
+      - name: Helm lint — dev values
+        run: |
+          helm lint ./helm/devops-app \
+            -f ./helm/devops-app/environments/dev/values.yaml
+
+      - name: Helm lint — prod values
+        run: |
+          helm lint ./helm/devops-app \
+            -f ./helm/devops-app/environments/prod/values.yaml
+
+      - name: Helm template (dry-run)
+        run: |
+          helm template devops-app ./helm/devops-app \
+            -f ./helm/devops-app/environments/dev/values.yaml \
+            --namespace dev > /dev/null
+          echo "Helm template rendered successfully"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.7.0'
+
+      - name: Terraform format check
+        run: terraform fmt -check -recursive ./terraform
+
+      - name: Terraform validate (dev)
+        run: |
+          cd terraform/environments/dev
+          terraform init -backend=false
+          terraform validate
