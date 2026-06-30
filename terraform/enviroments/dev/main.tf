@@ -13,7 +13,7 @@ terraform {
   }
 
   backend "s3" {
-    bucket         = "devops-portfolio-tfstate-dev"   # change to your bucket
+    bucket         = "devops-portfolio-tfstate-rishik-dev"   # change to your bucket
     key            = "dev/terraform.tfstate"
     region         = "ap-south-1"
     encrypt        = true
