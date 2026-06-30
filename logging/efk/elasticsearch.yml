@@ -54,14 +54,9 @@ spec:
             - name: es-data
               mountPath: /usr/share/elasticsearch/data
 
-  volumeClaimTemplates:
-    - metadata:
-        name: es-data
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 10Gi
+      volumes:
+        - name: es-data
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
