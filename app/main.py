@@ -44,12 +44,5 @@ def ready():
 
 @app.get("/metrics")
 def metrics():
-<<<<<<< HEAD
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
-<<<<<<< HEAD
-    # yes
-=======
-=======
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
->>>>>>> 143db22 (Testing: Push on develop)
->>>>>>> 2735a0d (Testing: Push on develop)
