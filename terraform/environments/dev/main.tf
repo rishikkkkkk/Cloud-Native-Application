@@ -59,7 +59,7 @@ module "iam" {
 }
 
 module "security_groups" {
-  source = "../../modules/security-groups"
+  source = "../../modules/security_groups"
 
   project_name = var.project_name
   environment  = var.environment
