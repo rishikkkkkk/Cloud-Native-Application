@@ -1,0 +1,140 @@
+# kube-prometheus-stack values
+# Install: helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+#           -f monitoring/prometheus/values.yaml -n monitoring --create-namespace
+
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    retentionSize: "8GB"
+
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+
+    # Pick up ServiceMonitors and PodMonitors from all namespaces
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+
+    additionalScrapeConfigs:
+      - job_name: devops-app
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: kubernetes_pod_name
+
+alertmanager:
+  enabled: true
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ['alertname', 'namespace']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      receiver: 'slack-notifications'
+    receivers:
+      - name: 'slack-notifications'
+        slack_configs:
+          - api_url: 'YOUR_SLACK_WEBHOOK_URL'   # replace with actual webhook
+            channel: '#alerts'
+            title: '{{ .GroupLabels.alertname }}'
+            text: '{{ range .Alerts }}{{ .Annotations.summary }}\n{{ end }}'
+            send_resolved: true
+
+grafana:
+  enabled: true
+  adminPassword: "admin123"   # change this in prod
+
+  service:
+    type: LoadBalancer
+
+  persistence:
+    enabled: true
+    size: 5Gi
+
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: 'default'
+          orgId: 1
+          folder: ''
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/default
+
+  dashboards:
+    default:
+      kubernetes-cluster:
+        gnetId: 7249
+        revision: 1
+        datasource: Prometheus
+      node-exporter:
+        gnetId: 1860
+        revision: 31
+        datasource: Prometheus
+      devops-app:
+        json: |
+          {
+            "title": "DevOps App",
+            "uid": "devops-app",
+            "panels": [
+              {
+                "title": "Request Rate",
+                "type": "graph",
+                "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+                "targets": [{
+                  "expr": "rate(app_requests_total[5m])",
+                  "legendFormat": "{{method}} {{endpoint}} {{status}}"
+                }]
+              },
+              {
+                "title": "P95 Latency",
+                "type": "graph",
+                "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+                "targets": [{
+                  "expr": "histogram_quantile(0.95, rate(app_request_latency_seconds_bucket[5m]))",
+                  "legendFormat": "p95 {{endpoint}}"
+                }]
+              },
+              {
+                "title": "Error Rate",
+                "type": "stat",
+                "gridPos": {"h": 4, "w": 6, "x": 0, "y": 8},
+                "targets": [{
+                  "expr": "rate(app_requests_total{status=~\"5..\"}[5m])",
+                  "legendFormat": "5xx errors/s"
+                }]
+              }
+            ],
+            "schemaVersion": 30,
+            "version": 1
+          }
+
+nodeExporter:
+  enabled: true
+
+kubeStateMetrics:
+  enabled: true

@@ -1,0 +1,28 @@
+replicaCount: 3
+
+image:
+  repository: rishikkk/devops-app
+  tag: "latest"
+
+service:
+  type: LoadBalancer
+  port: 80
+  targetPort: 8000
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 65
+
+env:
+  APP_ENV: "prod"
+  APP_VERSION: "1.0.0"
