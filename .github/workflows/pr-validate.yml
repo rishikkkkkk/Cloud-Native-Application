@@ -6,7 +6,7 @@ on:
     paths:
       - 'app/**'
       - 'helm/devops-app/**'
-      - '.github/workflows/ci-cd.yaml'
+      - '.github/workflows/ci-cd.yml'
 
 jobs:
   lint-and-validate:
