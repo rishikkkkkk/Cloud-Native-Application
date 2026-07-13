@@ -11,7 +11,7 @@ on:
           - dev
           - prod
       confirm:
-        description: 'Type "destroy" to confirm you want to destroy this environment'
+        description: 'Type "destroy" to confirm'
         required: true
         type: string
 
@@ -21,22 +21,24 @@ env:
 
 jobs:
   destroy:
-    name: Terraform Destroy — ${{ github.event.inputs.environment }}
+    name: Destroy — ${{ github.event.inputs.environment }}
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment }}
 
     steps:
+      # ── Safety check ────────────────────────────────────────────────────
       - name: Validate confirmation
         run: |
           if [ "${{ github.event.inputs.confirm }}" != "destroy" ]; then
-            echo "❌ Confirmation failed — you must type 'destroy' exactly to proceed."
+            echo "❌ You must type 'destroy' exactly to proceed."
             exit 1
           fi
-          echo "✅ Confirmation accepted — proceeding with destroy."
+          echo "✅ Confirmed — proceeding with ${{ github.event.inputs.environment }} destroy."
 
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # ── AWS + tools ─────────────────────────────────────────────────────
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -44,16 +46,63 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
+      # ── Kubernetes cleanup BEFORE terraform destroy ──────────────────────
+      - name: Configure kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name devops-portfolio-${{ github.event.inputs.environment }}
+        continue-on-error: true   # cluster may already be gone — don't fail
+
+      - name: Delete LoadBalancer services
+        run: |
+          echo "Deleting LoadBalancer services to release AWS ELBs..."
+          kubectl delete svc --all -n ${{ github.event.inputs.environment }} \
+            --field-selector spec.type=LoadBalancer 2>/dev/null || true
+          kubectl delete svc --all -n monitoring \
+            --field-selector spec.type=LoadBalancer 2>/dev/null || true
+          kubectl delete svc --all -n logging \
+            --field-selector spec.type=LoadBalancer 2>/dev/null || true
+          echo "LoadBalancer services deleted."
+        continue-on-error: true
+
+      - name: Wait for ELBs to deprovision
+        run: |
+          echo "Waiting 90 seconds for AWS to fully deprovision ELBs..."
+          sleep 90
+          echo "Done waiting."
+        continue-on-error: true
+
+      - name: Delete remaining Helm releases
+        run: |
+          echo "Uninstalling Helm releases..."
+          helm uninstall devops-app -n ${{ github.event.inputs.environment }} 2>/dev/null || true
+          helm uninstall kube-prometheus-stack -n monitoring 2>/dev/null || true
+          kubectl delete -f logging/efk/ --ignore-not-found 2>/dev/null || true
+          echo "Helm releases cleaned up."
+        continue-on-error: true
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.14.0'
+
+      # ── Terraform destroy ────────────────────────────────────────────────
       - name: Terraform Init
         working-directory: terraform/environments/${{ github.event.inputs.environment }}
         run: terraform init
 
-      - name: Terraform Plan Destroy (preview)
+      - name: Terraform Plan Destroy
         working-directory: terraform/environments/${{ github.event.inputs.environment }}
         run: |
           terraform plan -destroy -no-color 2>&1 | tee destroy-plan.txt
@@ -66,13 +115,40 @@ jobs:
         working-directory: terraform/environments/${{ github.event.inputs.environment }}
         run: terraform destroy -auto-approve
 
+      # ── Cleanup leftover AWS resources that Terraform may miss ───────────
+      - name: Delete orphaned ELBs
+        if: always()
+        run: |
+          echo "Checking for orphaned classic ELBs..."
+          ELBS=$(aws elb describe-load-balancers \
+            --region ${{ env.AWS_REGION }} \
+            --query 'LoadBalancerDescriptions[*].LoadBalancerName' \
+            --output text 2>/dev/null)
+          for elb in $ELBS; do
+            echo "Deleting ELB: $elb"
+            aws elb delete-load-balancer --load-balancer-name $elb --region ${{ env.AWS_REGION }} || true
+          done
+
+          echo "Checking for orphaned ALBs/NLBs..."
+          ARNS=$(aws elbv2 describe-load-balancers \
+            --region ${{ env.AWS_REGION }} \
+            --query 'LoadBalancers[*].LoadBalancerArn' \
+            --output text 2>/dev/null)
+          for arn in $ARNS; do
+            echo "Deleting ALB/NLB: $arn"
+            aws elbv2 delete-load-balancer --load-balancer-arn $arn --region ${{ env.AWS_REGION }} || true
+          done
+          echo "ELB cleanup done."
+        continue-on-error: true
+
+      # ── Slack notifications ──────────────────────────────────────────────
       - name: Notify Slack — Destroy success
         if: success()
         uses: slackapi/slack-github-action@v1.26.0
         with:
           payload: |
             {
-              "text": "💥 *${{ github.event.inputs.environment }} infrastructure destroyed*\n*Actor:* ${{ github.actor }}\n*Repo:* ${{ github.repository }}"
+              "text": "💥 *${{ github.event.inputs.environment }} infrastructure destroyed successfully*\n*Actor:* ${{ github.actor }}\n*Repo:* ${{ github.repository }}"
             }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
