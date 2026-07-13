@@ -8,14 +8,14 @@ on:
     paths:
       - 'app/**'
       - 'helm/devops-app/**'
-      - '.github/workflows/ci-cd.yaml'
+      - '.github/workflows/ci-cd.yml'
   pull_request:
     branches:
       - main
     paths:
       - 'app/**'
       - 'helm/devops-app/**'
-      - '.github/workflows/ci-cd.yaml'
+      - '.github/workflows/ci-cd.yml'
 
 env:
   IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/devops-app
