@@ -13,11 +13,11 @@ terraform {
   }
 
   backend "s3" {
-    bucket         = "devops-portfolio-tfstate-rishik-dev"   # change to your bucket
+    bucket         = "devops-portfolio-tfstate-rishik-dev1"   # change to your bucket
     key            = "dev/terraform.tfstate"
     region         = "ap-south-1"
     encrypt        = true
-    dynamodb_table = "devops-portfolio-tfstate-lock"  # optional but recommended
+    dynamodb_table = "devops-portfolio-tfstate-lock-dev"  # optional but recommended
   }
 }
 

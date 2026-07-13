@@ -8,14 +8,14 @@ on:
     paths:
       - 'app/**'
       - 'helm/devops-app/**'
-      - '.github/workflows/ci-cd.yaml'
+      - '.github/workflows/ci-cd.yml'
   pull_request:
     branches:
       - main
     paths:
       - 'app/**'
       - 'helm/devops-app/**'
-      - '.github/workflows/ci-cd.yaml'
+      - '.github/workflows/ci-cd.yml'
 
 env:
   IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/devops-app
@@ -89,9 +89,9 @@ jobs:
 
       - name: Configure kubeconfig
         run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBECONFIG_DEV }}" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
+          aws eks update-kubeconfig \
+            --region ap-south-1 \
+            --name devops-portfolio-dev
 
       - name: Helm upgrade (dev)
         id: helm_deploy
@@ -100,8 +100,8 @@ jobs:
             -f ${{ env.HELM_CHART }}/environments/dev/values.yaml \
             --namespace dev \
             --create-namespace \
-            --set image.tag=${{ needs.build.outputs.image_tag }} \
-            --set env.APP_VERSION=${{ needs.build.outputs.image_tag }} \
+            --set image.tag="${{ needs.build.outputs.image_tag }}" \
+            --set env.APP_VERSION="${{ needs.build.outputs.image_tag }}" \
             --wait \
             --timeout 5m \
             --atomic
@@ -178,9 +178,9 @@ jobs:
 
       - name: Configure kubeconfig
         run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
+          aws eks update-kubeconfig \
+            --region ap-south-1 \
+            --name devops-portfolio-prod
 
       - name: Capture current revision (for rollback)
         id: pre_deploy
@@ -196,8 +196,8 @@ jobs:
             -f ${{ env.HELM_CHART }}/environments/prod/values.yaml \
             --namespace prod \
             --create-namespace \
-            --set image.tag=${{ needs.build.outputs.image_tag }} \
-            --set env.APP_VERSION=${{ needs.build.outputs.image_tag }} \
+            --set image.tag="${{ needs.build.outputs.image_tag }}" \
+            --set env.APP_VERSION="${{ needs.build.outputs.image_tag }}" \
             --wait \
             --timeout 8m \
             --atomic
